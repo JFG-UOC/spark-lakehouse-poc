@@ -1,0 +1,234 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hive-site-config
+data:
+  hive-site.xml: |
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+    <configuration>
+      <!-- Thrift URI for the Hive Metastore -->
+      <property>
+        <name>hive.metastore.uris</name>
+        <value>thrift://hive-metastore-svc:9083</value>
+      </property>
+
+      <!-- MariaDB connection for Hive Metastore -->
+      <property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbc:mariadb://mariadb-svc:3306/hive</value>
+      </property>
+      <property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>org.mariadb.jdbc.Driver</value>
+      </property>
+      <property>
+        <name>javax.jdo.option.ConnectionUserName</name>
+        <value>${env.MARIADB_USER}</value>
+      </property>
+      <property>
+        <name>javax.jdo.option.ConnectionPassword</name>
+        <value>${env.MARIADB_PASSWORD}</value>
+      </property>
+
+      <!-- Warehouse location on MinIO via S3A -->
+      <property>
+        <name>hive.metastore.warehouse.dir</name>
+        <value>s3a://data/warehouse</value>
+      </property>
+
+      <!-- S3A configuration for MinIO (Hadoop 3.x has S3A support built-in) -->
+      <property>
+        <name>fs.s3a.impl</name>
+        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+      </property>
+      <property>
+        <name>fs.s3a.endpoint</name>
+        <value>http://minio-svc:9000</value>
+      </property>
+      <property>
+        <name>fs.s3a.path.style.access</name>
+        <value>true</value>
+      </property>
+      <property>
+        <name>fs.s3a.connection.ssl.enabled</name>
+        <value>false</value>
+      </property>
+      <property>
+        <name>fs.s3a.access.key</name>
+        <value>${env.MINIO_ROOT_USER}</value>
+      </property>
+      <property>
+        <name>fs.s3a.secret.key</name>
+        <value>${env.MINIO_ROOT_PASSWORD}</value>
+      </property>
+    </configuration>
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hive-metastore-init
+  labels:
+    app: hive-metastore-init
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: hive-metastore-init
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: fetch-jars
+          image: curlimages/curl:8.10.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -e
+              echo "Downloading MariaDB JDBC driver for Hive 4.0.1 schema initialization..."
+              mkdir -p /ext-jars
+              curl -fsSL -o /ext-jars/mariadb-java-client-3.5.1.jar \
+                https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.5.1/mariadb-java-client-3.5.1.jar
+              echo "MariaDB JDBC driver downloaded to /ext-jars:"
+              ls -l /ext-jars
+          volumeMounts:
+            - name: ext-jars
+              mountPath: /ext-jars
+      containers:
+        - name: schematool
+          image: apache/hive:4.0.1
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: mariadb-secret
+          env:
+            - name: HIVE_AUX_JARS_PATH
+              value: /ext-jars
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              echo "Initializing Hive Metastore schema on MariaDB using schematool..."
+              /opt/hive/bin/schematool \
+                -initSchema \
+                -dbType mysql \
+                -userName "${MARIADB_USER}" \
+                -passWord "${MARIADB_PASSWORD}" \
+                -url "jdbc:mariadb://mariadb-svc:3306/hive" \
+                -verbose
+              echo "Schema initialization completed."
+          volumeMounts:
+            - name: ext-jars
+              mountPath: /ext-jars
+      volumes:
+        - name: ext-jars
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hive-metastore
+  labels:
+    app: hive-metastore
+    component: metastore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hive-metastore
+  template:
+    metadata:
+      labels:
+        app: hive-metastore
+        component: metastore
+    spec:
+      initContainers:
+        - name: fetch-jars
+          image: curlimages/curl:8.10.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -e
+              echo "Downloading MariaDB JDBC driver for Hive 4.0.1..."
+              mkdir -p /ext-jars
+              curl -fsSL -o /ext-jars/mariadb-java-client-3.5.1.jar \
+                https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.5.1/mariadb-java-client-3.5.1.jar
+              echo "Downloading hadoop-aws 3.3.6..."
+              curl -fsSL -o /ext-jars/hadoop-aws-3.3.6.jar \
+                https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.6/hadoop-aws-3.3.6.jar
+              echo "Downloading aws bundle 1.12.367..."
+              curl -fsSL -o /ext-jars/aws-java-sdk-bundle-1.12.367.jar \
+                https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.367/aws-java-sdk-bundle-1.12.367.jar
+              echo "Contents of /ext-jars:"
+              ls -lh /ext-jars
+          volumeMounts:
+            - name: ext-jars
+              mountPath: /ext-jars
+      containers:
+        - name: metastore
+          image: apache/hive:4.0.1
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: mariadb-secret
+            - secretRef:
+                name: minio-secret
+          env:
+            - name: HIVE_AUX_JARS_PATH
+              value: /ext-jars
+            - name: HADOOP_CLASSPATH
+              value: "/opt/hadoop/ext-jars/*"
+          ports:
+            - name: thrift
+              containerPort: 9083
+          volumeMounts:
+            - name: hive-site-config
+              mountPath: /opt/hive/conf/hive-site.xml
+              subPath: hive-site.xml
+            - name: ext-jars
+              mountPath: /opt/hadoop/ext-jars
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              echo "Starting Hive 4.0.1 Metastore on 0.0.0.0:9083..."
+              /opt/hive/bin/hive --service metastore -p 9083
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+      volumes:
+        - name: hive-site-config
+          configMap:
+            name: hive-site-config
+            items:
+              - key: hive-site.xml
+                path: hive-site.xml
+        - name: ext-jars
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hive-metastore-svc
+  labels:
+    app: hive-metastore
+spec:
+  type: ClusterIP
+  selector:
+    app: hive-metastore
+  ports:
+    - name: thrift
+      port: 9083
+      targetPort: 9083
