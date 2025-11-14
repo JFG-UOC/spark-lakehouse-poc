@@ -143,6 +143,7 @@ spec:
                   name: minio-secret
                   key: MINIO_ROOT_PASSWORD
           ports:
+            - containerPort: 6066
             - containerPort: 7077
             - containerPort: 8080
             - containerPort: 39000
@@ -182,6 +183,9 @@ spec:
     app: spark
     role: master
   ports:
+    - name: rest
+      port: 6066
+      targetPort: 6066
     - name: cluster
       port: 7077
       targetPort: 7077
