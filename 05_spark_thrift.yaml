@@ -55,7 +55,7 @@ spec:
                 --conf spark.sql.warehouse.dir=s3a://data/warehouse \
                 --conf spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension \
                 --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog \
-                --conf spark.sql.hive.metastore.version=3.1.3 \
+                --conf spark.sql.hive.metastore.version=4.0.1 \
                 --conf spark.sql.hive.metastore.jars=maven \
                 --conf spark.jars.ivy=/tmp/.ivy2 \
                 --conf spark.driver.extraJavaOptions="-Duser.home=/tmp -Divy.home=/tmp/.ivy2" \
@@ -68,8 +68,8 @@ spec:
                 --conf spark.driver.host=spark-thrift-svc \
                 --conf spark.driver.port=39000 \
                 --conf spark.blockManager.port=39001 \
-                --conf spark.executor.cores=4 \
-                --conf spark.cores.max=8
+                --conf spark.executor.cores=2 \
+                --conf spark.cores.max=4
               tail -f /opt/spark/logs/* &
               wait
           env:
