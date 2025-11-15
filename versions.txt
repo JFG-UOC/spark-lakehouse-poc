@@ -1,0 +1,23 @@
+MinIO
+
+	minio:RELEASE.2025-09-07T16-13-09Z
+	mc:RELEASE.2025-08-13T08-35-41Z
+
+MariaDB
+
+	mariadb:11.4
+
+Hive Metastore
+
+	hive:4.0.1
+	mariadb-java-client-3.5.1
+        hadoop-aws-3.3.6
+	aws-java-sdk-bundle-1.12.367
+
+Spark
+
+	spark:4.0.1
+	hadoop-aws-3.4.1
+	bundle-2.38.5
+	delta-spark_2.13-4.0.0
+        delta-storage-4.0.0
