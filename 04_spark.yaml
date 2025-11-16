@@ -37,7 +37,7 @@ data:
       <!-- MinIO endpoint -->
       <property>
         <name>fs.s3a.endpoint</name>
-        <value>http://minio-svc:9000</value>
+        <value>${env.S3_ENDPOINT}</value>
       </property>
 
       <!-- Path-style access required for MinIO -->
@@ -135,13 +135,18 @@ spec:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: minio-secret
-                  key: MINIO_ROOT_USER
+                  name: s3-secret
+                  key: S3_ACCESS_KEY
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: minio-secret
-                  key: MINIO_ROOT_PASSWORD
+                  name: s3-secret
+                  key: S3_SECRET_KEY
+            - name: S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: s3-secret
+                  key: S3_ENDPOINT
           ports:
             - containerPort: 6066
             - containerPort: 7077
@@ -260,13 +265,18 @@ spec:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: minio-secret
-                  key: MINIO_ROOT_USER
+                  name: s3-secret
+                  key: S3_ACCESS_KEY
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: minio-secret
-                  key: MINIO_ROOT_PASSWORD
+                  name: s3-secret
+                  key: S3_SECRET_KEY
+            - name: S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: s3-secret
+                  key: S3_ENDPOINT
           ports:
             - containerPort: 8081
           volumeMounts:

@@ -34,7 +34,7 @@ data:
       <!-- Warehouse location on MinIO via S3A -->
       <property>
         <name>hive.metastore.warehouse.dir</name>
-        <value>s3a://data/warehouse</value>
+        <value>s3a://${env.S3_BUCKET}/warehouse</value>
       </property>
 
       <!-- S3A configuration for MinIO (Hadoop 3.x has S3A support built-in) -->
@@ -44,7 +44,7 @@ data:
       </property>
       <property>
         <name>fs.s3a.endpoint</name>
-        <value>http://minio-svc:9000</value>
+        <value>${env.S3_ENDPOINT}</value>
       </property>
       <property>
         <name>fs.s3a.path.style.access</name>
@@ -56,11 +56,11 @@ data:
       </property>
       <property>
         <name>fs.s3a.access.key</name>
-        <value>${env.MINIO_ROOT_USER}</value>
+        <value>${env.S3_ACCESS_KEY}</value>
       </property>
       <property>
         <name>fs.s3a.secret.key</name>
-        <value>${env.MINIO_ROOT_PASSWORD}</value>
+        <value>${env.S3_SECRET_KEY}</value>
       </property>
     </configuration>
 ---
@@ -179,7 +179,7 @@ spec:
             - secretRef:
                 name: mariadb-secret
             - secretRef:
-                name: minio-secret
+                name: s3-secret
           env:
             - name: HIVE_AUX_JARS_PATH
               value: /ext-jars
