@@ -1,0 +1,195 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jupyter-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jupyter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jupyter
+  template:
+    metadata:
+      labels:
+        app: jupyter
+    spec:
+      initContainers:
+        - name: install-java
+          image: curlimages/curl:8.11.1
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Creating /opt/java..."
+              mkdir -p /opt/java
+
+              echo "Downloading OpenJDK 17.0.16..."
+              cd /tmp
+              curl -fsSL -o openjdk.tar.gz \
+                https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.16%2B8/OpenJDK17U-jdk_x64_linux_hotspot_17.0.16_8.tar.gz
+
+              echo "Extracting OpenJDK..."
+              tar -xzf openjdk.tar.gz
+              rm -f openjdk.tar.gz
+
+              echo "Moving OpenJDK to /opt/java..."
+              mv jdk-17.0.16+8/* /opt/java/
+              rm -rf jdk-17.0.16+8
+
+              echo "Java installed at /opt/java"
+          volumeMounts:
+            - name: java-dist
+              mountPath: /opt/java
+
+        - name: setup-spark
+          image: curlimages/curl:8.11.1
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+
+              echo "Creating /opt/spark..."
+              mkdir -p /opt/spark
+
+              echo "Downloading Spark 4.0.1..."
+              cd /tmp
+              curl -fsSL -o spark-4.0.1-bin-hadoop3.tgz \
+                https://archive.apache.org/dist/spark/spark-4.0.1/spark-4.0.1-bin-hadoop3.tgz
+
+              echo "Extracting Spark..."
+              tar -xzf spark-4.0.1-bin-hadoop3.tgz
+              rm -f spark-4.0.1-bin-hadoop3.tgz
+
+              echo "Moving Spark to /opt/spark..."
+              mv spark-4.0.1-bin-hadoop3/* /opt/spark/
+              rm -rf spark-4.0.1-bin-hadoop3
+
+              echo "Preparing ext-jars directory..."
+              mkdir -p /opt/spark/ext-jars
+
+              echo "Downloading hadoop-aws 3.4.1..."
+              curl -fsSL -o /opt/spark/ext-jars/hadoop-aws-3.4.1.jar \
+                https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws-3.4.1.jar
+
+              echo "Downloading AWS SDK bundle 2.x..."
+              curl -fsSL -o /opt/spark/ext-jars/bundle-2.38.5.jar \
+                https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.38.5/bundle-2.38.5.jar
+
+              echo "Downloading Delta Lake..."
+              curl -fsSL -o /opt/spark/ext-jars/delta-spark_2.13-4.0.0.jar \
+                https://repo1.maven.org/maven2/io/delta/delta-spark_2.13/4.0.0/delta-spark_2.13-4.0.0.jar
+              curl -fsSL -o /opt/spark/ext-jars/delta-storage-4.0.0.jar \
+                https://repo1.maven.org/maven2/io/delta/delta-storage/4.0.0/delta-storage-4.0.0.jar
+
+              echo "Spark ready in /opt/spark"
+          volumeMounts:
+            - name: spark-dist
+              mountPath: /opt/spark
+
+      containers:
+        - name: jupyter
+          image: jupyter/datascience-notebook:python-3.10
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8888
+
+          command:
+            - bash
+            - -lc
+          args:
+            - |
+              pip install --no-cache-dir pyspark==4.0.1
+              start-notebook.sh
+
+          env:
+            - name: JUPYTER_TOKEN
+              value: "poc"
+            - name: JAVA_HOME
+              value: "/opt/java"
+            - name: SPARK_HOME
+              value: "/opt/spark"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+
+            - name: JAVA_TOOL_OPTIONS
+              value: >
+                -Dspark.master=spark://spark-master-svc:7077
+                -Dspark.driver.host=jupyter-svc
+                -Dspark.driver.bindAddress=0.0.0.0
+                -Dspark.driver.port=39000
+                -Dspark.blockManager.port=39001
+                -Dspark.executor.extraClassPath=/opt/spark/ext-jars/*
+                -Dspark.driver.extraClassPath=/opt/spark/ext-jars/*
+                -Dhadoop.fs.s3a.endpoint=http://minio-svc:9000
+                -Dhadoop.fs.s3a.path.style.access=true
+                -Dhadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+                -Dhadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+
+          volumeMounts:
+            - name: java-dist
+              mountPath: /opt/java
+            - name: spark-dist
+              mountPath: /opt/spark
+            - name: hadoop-core-site
+              mountPath: /opt/spark/conf/core-site.xml
+              subPath: core-site.xml
+            - name: spark-defaults
+              mountPath: /opt/spark/conf/spark-defaults.conf
+              subPath: spark-defaults.conf
+            - name: jupyter-data
+              mountPath: /home/jovyan/work
+
+      volumes:
+        - name: java-dist
+          emptyDir: {}
+        - name: spark-dist
+          emptyDir: {}
+        - name: hadoop-core-site
+          configMap:
+            name: spark-hadoop-core-site
+        - name: spark-defaults
+          configMap:
+            name: spark-defaults
+        - name: jupyter-data
+          persistentVolumeClaim:
+            claimName: jupyter-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jupyter-svc
+spec:
+  type: ClusterIP
+  ports:
+    - name: notebook
+      port: 8888
+      targetPort: 8888
+    - name: driver-rpc
+      port: 39000
+      targetPort: 39000
+    - name: blockmanager
+      port: 39001
+      targetPort: 39001
+  selector:
+    app: jupyter
