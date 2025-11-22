@@ -7,23 +7,23 @@ data:
     # Spark master for standalone mode
     spark.master                      spark://spark-master-svc:7077
 
-    # Fixed driver and blockManager ports (for Kubernetes networking)
+    # Fixed driver and blockManager ports
     spark.driver.bindAddress          0.0.0.0
     spark.driver.port                 39000
     spark.blockManager.port           39001
 
-    # Hive metastore integration
+    # Hive metastore
     spark.sql.catalogImplementation   hive
     spark.hadoop.hive.metastore.uris  thrift://hive-metastore-svc:9083
+    spark.sql.hive.metastore.version  3.1.3
+    spark.sql.hive.metastore.jars     maven
 
-    # Recommended network timeout
     spark.network.timeout             300s
 
-    # Enable event logging (optional)
+    # Event logging
     spark.eventLog.enabled            true
-    spark.eventLog.dir                /tmp/spark-events
+    spark.eventLog.dir                s3a://data/spark-events
 
-    #
     spark.driver.extraClassPath       /opt/spark/ext-jars/*
     spark.executor.extraClassPath     /opt/spark/ext-jars/*
 ---
@@ -34,45 +34,35 @@ metadata:
 data:
   core-site.xml: |-
     <configuration>
-      <!-- MinIO endpoint -->
       <property>
         <name>fs.s3a.endpoint</name>
         <value>http://minio-svc:9000</value>
       </property>
-
-      <!-- Path-style access required for MinIO -->
       <property>
         <name>fs.s3a.path.style.access</name>
         <value>true</value>
       </property>
-
-      <!-- S3A client implementation -->
       <property>
         <name>fs.s3a.impl</name>
         <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
       </property>
-
-      <!-- SSL disabled because MinIO endpoint is HTTP -->
       <property>
         <name>fs.s3a.connection.ssl.enabled</name>
         <value>false</value>
       </property>
-
-      <!-- Credential provider chain (ENV providers for MinIO) -->
       <property>
         <name>fs.s3a.aws.credentials.provider</name>
         <value>
-          software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider,
-          com.amazonaws.auth.EnvironmentVariableCredentialsProvider
+          com.amazonaws.auth.EnvironmentVariableCredentialsProvider,
+          com.amazonaws.auth.InstanceProfileCredentialsProvider
         </value>
       </property>
-
-      <!-- Optional: more stable retry policy -->
       <property>
         <name>fs.s3a.attempts.maximum</name>
         <value>5</value>
       </property>
     </configuration>
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -90,45 +80,42 @@ spec:
         app: spark
         role: master
     spec:
+
       initContainers:
         - name: fetch-jars
           image: curlimages/curl:8.11.1
-          command:
-            - sh
-            - -c
-            - |
-              set -e
-              mkdir -p /ext-jars
+          command: ["sh","-c","
+            set -e;
+            mkdir -p /ext-jars;
 
-              echo "Downloading hadoop-aws 3.4.1..."
-              curl -fsSL -o /ext-jars/hadoop-aws-3.4.1.jar \
-                https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws-3.4.1.jar
+            echo 'Downloading hadoop-aws...';
+            curl -fsSL -o /ext-jars/hadoop-aws-3.3.4.jar \
+              https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar;
 
-              echo "Downloading AWS SDK bundle..."
-              curl -fsSL -o /ext-jars/bundle-2.38.5.jar \
-                https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.38.5/bundle-2.38.5.jar
+            echo 'Downloading AWS SDK...';
+            curl -fsSL -o /ext-jars/aws-java-sdk-bundle-1.12.262.jar \
+              https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar;
 
-              echo "Downloading Delta Lake for Spark..."
-              curl -fsSL -o /ext-jars/delta-spark_2.13-4.0.0.jar \
-                https://repo1.maven.org/maven2/io/delta/delta-spark_2.13/4.0.0/delta-spark_2.13-4.0.0.jar
-              curl -fsSL -o /ext-jars/delta-storage-4.0.0.jar \
-                https://repo1.maven.org/maven2/io/delta/delta-storage/4.0.0/delta-storage-4.0.0.jar
+            echo 'Downloading Delta Lake...';
+            curl -fsSL -o /ext-jars/delta-spark_2.12-3.3.2.jar \
+              https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/3.3.2/delta-spark_2.12-3.3.2.jar;
+            curl -fsSL -o /ext-jars/delta-storage-3.3.2.jar \
+              https://repo1.maven.org/maven2/io/delta/delta-storage/3.3.2/delta-storage-3.3.2.jar;
+
+          "]
           volumeMounts:
             - name: ext-jars
               mountPath: /ext-jars
+
       containers:
         - name: master
-          image: apache/spark:4.0.1
-          imagePullPolicy: IfNotPresent
+          image: apache/spark:3.5.6
           command: ["/bin/bash","-lc"]
           args:
             - |
-              /opt/spark/sbin/start-master.sh \
-                --host 0.0.0.0 \
-                --port 7077 \
-                --webui-port 8080
-              tail -f /opt/spark/logs/* &
-              wait
+              /opt/spark/sbin/start-master.sh --host 0.0.0.0 --port 7077 --webui-port 8080
+              tail -f /opt/spark/logs/* & wait
+
           env:
             - name: HOME
               value: "/tmp"
@@ -142,12 +129,14 @@ spec:
                 secretKeyRef:
                   name: minio-secret
                   key: MINIO_ROOT_PASSWORD
+
           ports:
             - containerPort: 6066
             - containerPort: 7077
             - containerPort: 8080
             - containerPort: 39000
             - containerPort: 39001
+
           volumeMounts:
             - name: spark-defaults
               mountPath: /opt/spark/conf/spark-defaults.conf
@@ -157,13 +146,7 @@ spec:
               subPath: core-site.xml
             - name: ext-jars
               mountPath: /opt/spark/ext-jars
-          resources:
-            requests:
-              cpu: "250m"
-              memory: "512Mi"
-            limits:
-              cpu: "1"
-              memory: "1Gi"
+
       volumes:
         - name: spark-defaults
           configMap:
@@ -173,6 +156,7 @@ spec:
             name: spark-hadoop-core-site
         - name: ext-jars
           emptyDir: {}
+
 ---
 apiVersion: v1
 kind: Service
@@ -185,26 +169,22 @@ spec:
   ports:
     - name: rest
       port: 6066
-      targetPort: 6066
     - name: cluster
       port: 7077
-      targetPort: 7077
     - name: ui
       port: 8080
-      targetPort: 8080
     - name: driver-rpc
       port: 39000
-      targetPort: 39000
     - name: blockmanager
       port: 39001
-      targetPort: 39001
+
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: spark-worker
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: spark
@@ -215,45 +195,45 @@ spec:
         app: spark
         role: worker
     spec:
+
       initContainers:
         - name: fetch-jars
           image: curlimages/curl:8.11.1
-          command:
-            - sh
-            - -c
-            - |
-              set -e
-              mkdir -p /ext-jars
+          command: ["sh","-c","
+            set -e;
+            mkdir -p /ext-jars;
 
-              echo "Downloading hadoop-aws 3.4.1..."
-              curl -fsSL -o /ext-jars/hadoop-aws-3.4.1.jar \
-                https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws-3.4.1.jar
+            echo 'Downloading hadoop-aws...';
+            curl -fsSL -o /ext-jars/hadoop-aws-3.3.4.jar \
+              https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar;
 
-              echo "Downloading AWS SDK bundle..."
-              curl -fsSL -o /ext-jars/bundle-2.38.5.jar \
-                https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.38.5/bundle-2.38.5.jar
+            echo 'Downloading AWS SDK...';
+            curl -fsSL -o /ext-jars/aws-java-sdk-bundle-1.12.262.jar \
+              https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar;
 
-              echo "Downloading Delta Lake for Spark..."
-              curl -fsSL -o /ext-jars/delta-spark_2.13-4.0.0.jar \
-                https://repo1.maven.org/maven2/io/delta/delta-spark_2.13/4.0.0/delta-spark_2.13-4.0.0.jar
-              curl -fsSL -o /ext-jars/delta-storage-4.0.0.jar \
-                https://repo1.maven.org/maven2/io/delta/delta-storage/4.0.0/delta-storage-4.0.0.jar
+            echo 'Downloading Delta Lake...';
+            curl -fsSL -o /ext-jars/delta-spark_2.12-3.3.2.jar \
+              https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/3.3.2/delta-spark_2.12-3.3.2.jar;
+            curl -fsSL -o /ext-jars/delta-storage-3.3.2.jar \
+              https://repo1.maven.org/maven2/io/delta/delta-storage/3.3.2/delta-storage-3.3.2.jar;
+
+          "]
           volumeMounts:
             - name: ext-jars
               mountPath: /ext-jars
+
       containers:
         - name: worker
-          image: apache/spark:4.0.1
-          imagePullPolicy: IfNotPresent
+          image: apache/spark:3.5.6
           command: ["/bin/bash","-lc"]
           args:
             - |
               /opt/spark/sbin/start-worker.sh \
                 spark://spark-master-svc:7077 \
-                --cores 4 \
+                --cores 8 \
                 --webui-port 8081
-              tail -f /opt/spark/logs/* &
-              wait
+              tail -f /opt/spark/logs/* & wait
+
           env:
             - name: HOME
               value: "/tmp"
@@ -267,8 +247,10 @@ spec:
                 secretKeyRef:
                   name: minio-secret
                   key: MINIO_ROOT_PASSWORD
+
           ports:
             - containerPort: 8081
+
           volumeMounts:
             - name: spark-defaults
               mountPath: /opt/spark/conf/spark-defaults.conf
@@ -278,13 +260,15 @@ spec:
               subPath: core-site.xml
             - name: ext-jars
               mountPath: /opt/spark/ext-jars
+
           resources:
             requests:
-              cpu: "250m"
-              memory: "512Mi"
+              cpu: "1"
+              memory: "1Gi"
             limits:
-              cpu: "4"
-              memory: "8Gi"
+              cpu: "8"
+              memory: "16Gi"
+
       volumes:
         - name: spark-defaults
           configMap:

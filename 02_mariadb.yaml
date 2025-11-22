@@ -21,6 +21,15 @@ spec:
       storage: 10Gi
   storageClassName: microk8s-hostpath
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mariadb-config
+data:
+  custom.cnf: |
+    [mysqld]
+    sql_mode=ANSI,NO_ENGINE_SUBSTITUTION,NO_BACKSLASH_ESCAPES
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -52,6 +61,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/mysql
+            - name: mariadb-config
+              mountPath: /etc/mysql/conf.d/custom.cnf
+              subPath: custom.cnf
           resources:
             requests:
               cpu: "100m"
@@ -63,6 +75,9 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: mariadb-pvc
+        - name: mariadb-config
+          configMap:
+            name: mariadb-config
 ---
 apiVersion: v1
 kind: Service

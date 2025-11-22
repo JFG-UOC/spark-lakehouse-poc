@@ -83,3 +83,17 @@ spec:
     - name: thrift
       port: 10000
       targetPort: 10000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jupyter-svc-lb
+  namespace: lakehouse
+spec:
+  type: LoadBalancer
+  ports:
+    - name: notebook
+      port: 8888
+      targetPort: 8888
+  selector:
+    app: jupyter

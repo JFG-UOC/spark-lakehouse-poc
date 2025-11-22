@@ -1,23 +1,110 @@
-MinIO
+========================================
+  DATA LAKEHOUSE POC - COMPONENT VERSIONS
+========================================
 
-	minio:RELEASE.2025-09-07T16-13-09Z
-	mc:RELEASE.2025-08-13T08-35-41Z
+-------------------------
+NAMESPACE
+-------------------------
+lakehouse
+:contentReference[oaicite:0]{index=0}
 
-MariaDB
+-------------------------
+MINIO (S3 STORAGE)
+-------------------------
+minio/minio:RELEASE.2025-09-07T16-13-09Z
+minio/mc:RELEASE.2025-08-13T08-35-41Z
+:contentReference[oaicite:1]{index=1}
 
-	mariadb:11.4
+-------------------------
+MARIADB (HIVE METASTORE DB)
+-------------------------
+mariadb:11.4
+:contentReference[oaicite:2]{index=2}
 
-Hive Metastore
+-------------------------
+HIVE METASTORE
+-------------------------
+apache/hive:3.1.3
+MariaDB JDBC: mariadb-java-client-3.5.1.jar
+hadoop-aws: 3.1.0
+aws-java-sdk-bundle: 1.11.271
+:contentReference[oaicite:3]{index=3}
 
-	hive:4.0.1
-	mariadb-java-client-3.5.1
-        hadoop-aws-3.3.6
-	aws-java-sdk-bundle-1.12.367
+-------------------------
+SPARK (MASTER, WORKER, THRIFT, JUPYTER)
+-------------------------
+Spark version: 3.5.6  
+(En Jupyter se descarga spark-3.5.6-bin-hadoop3)
+apache/spark:3.5.6 (master/worker/thrift)
+pyspark==3.5.6 (Jupyter)
+:contentReference[oaicite:4]{index=4} :contentReference[oaicite:5]{index=5}
 
-Spark
+-------------------------
+JAVA (Jupyter)
+-------------------------
+OpenJDK 11.0.27 (Temurin)  
+OpenJDK11U-jdk_x64_linux_hotspot_11.0.27_6.tar.gz  
+:contentReference[oaicite:6]{index=6}
 
-	spark:4.0.1
-	hadoop-aws-3.4.1
-	bundle-2.38.5
-	delta-spark_2.13-4.0.0
-        delta-storage-4.0.0
+-------------------------
+HADOOP-AWS + AWS SDK (Spark + Jupyter)
+-------------------------
+hadoop-aws: 3.3.4  
+aws-java-sdk-bundle: 1.12.262  
+:contentReference[oaicite:7]{index=7} :contentReference[oaicite:8]{index=8}
+
+-------------------------
+DELTA LAKE
+-------------------------
+delta-spark_2.12: 3.3.2  
+delta-storage: 3.3.2  
+:contentReference[oaicite:9]{index=9} :contentReference[oaicite:10]{index=10}
+
+-------------------------
+RAPIDS + CUDF (Spark GPU JARs)
+-------------------------
+rapids-4-spark_2.12: 25.10.0  
+cudf: 25.10.0-cuda12  
+:contentReference[oaicite:11]{index=11} :contentReference[oaicite:12]{index=12}
+
+-------------------------
+CONFIGMAP VERSIONS (Spark)
+-------------------------
+spark-defaults.conf → defines Spark 3.5.6 + RAPIDS plugin
+spark-gpu-discovery → custom getGpus.sh
+spark-hadoop-core-site → hadoop-s3a config
+:contentReference[oaicite:13]{index=13}
+
+-------------------------
+JUPYTER NOTEBOOK
+-------------------------
+Image: jupyter/datascience-notebook:python-3.8
+pyspark: 3.5.6  
+Java: Temurin OpenJDK 11.0.27  
+Spark: 3.5.6 (downloaded inside initContainer)
+:contentReference[oaicite:14]{index=14}
+
+-------------------------
+SPARK THRIFT SERVER
+-------------------------
+apache/spark:3.5.6  
+Uses all JARs (AWS SDK, Hadoop-AWS, Delta, RAPIDS)
+:contentReference[oaicite:15]{index=15}
+
+-------------------------
+SPARK MASTER & WORKER
+-------------------------
+Image: apache/spark:3.5.6  
+Worker GPU: nvidia.com/gpu=1  
+Hadoop-AWS 3.3.4 / AWS SDK 1.12.262 / Delta 3.3.2 / CUDF 25.10.0  
+:contentReference[oaicite:16]{index=16}
+
+-------------------------
+LOAD BALANCERS & SERVICES
+-------------------------
+(services have no versions, only metadata)
+:contentReference[oaicite:17]{index=17}
+
+========================================
+END OF FILE
+========================================

@@ -88,7 +88,7 @@ spec:
           args:
             - |
               set -e
-              echo "Downloading MariaDB JDBC driver for Hive 4.0.1 schema initialization..."
+              echo "Downloading MariaDB JDBC driver for Hive 3.1.3 schema initialization..."
               mkdir -p /ext-jars
               curl -fsSL -o /ext-jars/mariadb-java-client-3.5.1.jar \
                 https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.5.1/mariadb-java-client-3.5.1.jar
@@ -99,7 +99,7 @@ spec:
               mountPath: /ext-jars
       containers:
         - name: schematool
-          image: apache/hive:4.0.1
+          image: apache/hive:3.1.3
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
@@ -156,16 +156,16 @@ spec:
           args:
             - |
               set -e
-              echo "Downloading MariaDB JDBC driver for Hive 4.0.1..."
+              echo "Downloading MariaDB JDBC driver for Hive 3.1.3..."
               mkdir -p /ext-jars
               curl -fsSL -o /ext-jars/mariadb-java-client-3.5.1.jar \
                 https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.5.1/mariadb-java-client-3.5.1.jar
-              echo "Downloading hadoop-aws 3.3.6..."
-              curl -fsSL -o /ext-jars/hadoop-aws-3.3.6.jar \
-                https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.6/hadoop-aws-3.3.6.jar
-              echo "Downloading aws bundle 1.12.367..."
-              curl -fsSL -o /ext-jars/aws-java-sdk-bundle-1.12.367.jar \
-                https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.367/aws-java-sdk-bundle-1.12.367.jar
+              echo "Downloading hadoop-aws 3.1.0..."
+              curl -fsSL -o /ext-jars/hadoop-aws-3.1.0.jar \
+                https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.1.0/hadoop-aws-3.1.0.jar
+              echo "Downloading aws bundle 1.11.271"
+              curl -fsSL -o /ext-jars/aws-java-sdk-bundle-1.11.271.jar \
+                https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.11.271/aws-java-sdk-bundle-1.11.271.jar
               echo "Contents of /ext-jars:"
               ls -lh /ext-jars
           volumeMounts:
@@ -173,7 +173,7 @@ spec:
               mountPath: /ext-jars
       containers:
         - name: metastore
-          image: apache/hive:4.0.1
+          image: apache/hive:3.1.3
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
@@ -199,7 +199,7 @@ spec:
             - -c
           args:
             - |
-              echo "Starting Hive 4.0.1 Metastore on 0.0.0.0:9083..."
+              echo "Starting Hive 3.1.3 Metastore on 0.0.0.0:9083..."
               /opt/hive/bin/hive --service metastore -p 9083
           resources:
             requests:

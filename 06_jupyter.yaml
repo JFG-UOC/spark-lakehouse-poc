@@ -35,18 +35,18 @@ spec:
               echo "Creating /opt/java..."
               mkdir -p /opt/java
 
-              echo "Downloading OpenJDK 17.0.16..."
+              echo "Downloading OpenJDK 11.0.27..."
               cd /tmp
               curl -fsSL -o openjdk.tar.gz \
-                https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.16%2B8/OpenJDK17U-jdk_x64_linux_hotspot_17.0.16_8.tar.gz
+                https://github.com/adoptium/temurin11-binaries/releases/download/jdk-11.0.27+6/OpenJDK11U-jdk_x64_linux_hotspot_11.0.27_6.tar.gz
 
               echo "Extracting OpenJDK..."
               tar -xzf openjdk.tar.gz
               rm -f openjdk.tar.gz
 
               echo "Moving OpenJDK to /opt/java..."
-              mv jdk-17.0.16+8/* /opt/java/
-              rm -rf jdk-17.0.16+8
+              mv jdk-11.0.27+6/* /opt/java/
+              rm -rf "jdk-11.0.27+6"
 
               echo "Java installed at /opt/java"
           volumeMounts:
@@ -64,35 +64,41 @@ spec:
               echo "Creating /opt/spark..."
               mkdir -p /opt/spark
 
-              echo "Downloading Spark 4.0.1..."
+              echo "Downloading Spark 3.5.6..."
               cd /tmp
-              curl -fsSL -o spark-4.0.1-bin-hadoop3.tgz \
-                https://archive.apache.org/dist/spark/spark-4.0.1/spark-4.0.1-bin-hadoop3.tgz
+              curl -fsSL -o spark-3.5.6-bin-hadoop3.tgz \
+                https://archive.apache.org/dist/spark/spark-3.5.6/spark-3.5.6-bin-hadoop3.tgz
 
               echo "Extracting Spark..."
-              tar -xzf spark-4.0.1-bin-hadoop3.tgz
-              rm -f spark-4.0.1-bin-hadoop3.tgz
+              tar -xzf spark-3.5.6-bin-hadoop3.tgz -C /tmp
+              rm -f spark-3.5.6-bin-hadoop3.tgz
 
               echo "Moving Spark to /opt/spark..."
-              mv spark-4.0.1-bin-hadoop3/* /opt/spark/
-              rm -rf spark-4.0.1-bin-hadoop3
+              mv /tmp/spark-3.5.6-bin-hadoop3/* /opt/spark/
+              rm -rf /tmp/spark-3.5.6-bin-hadoop3
 
               echo "Preparing ext-jars directory..."
               mkdir -p /opt/spark/ext-jars
 
-              echo "Downloading hadoop-aws 3.4.1..."
-              curl -fsSL -o /opt/spark/ext-jars/hadoop-aws-3.4.1.jar \
-                https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws-3.4.1.jar
+              echo 'Downloading hadoop-aws...';
+              curl -fsSL -o /opt/spark/ext-jars/hadoop-aws-3.3.4.jar \
+                https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar;
 
-              echo "Downloading AWS SDK bundle 2.x..."
-              curl -fsSL -o /opt/spark/ext-jars/bundle-2.38.5.jar \
-                https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.38.5/bundle-2.38.5.jar
+              echo 'Downloading AWS SDK...';
+              curl -fsSL -o /opt/spark/ext-jars/aws-java-sdk-bundle-1.12.262.jar \
+                https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar;
 
-              echo "Downloading Delta Lake..."
-              curl -fsSL -o /opt/spark/ext-jars/delta-spark_2.13-4.0.0.jar \
-                https://repo1.maven.org/maven2/io/delta/delta-spark_2.13/4.0.0/delta-spark_2.13-4.0.0.jar
-              curl -fsSL -o /opt/spark/ext-jars/delta-storage-4.0.0.jar \
-                https://repo1.maven.org/maven2/io/delta/delta-storage/4.0.0/delta-storage-4.0.0.jar
+              echo 'Downloading Delta Lake...';
+              curl -fsSL -o /opt/spark/ext-jars/delta-spark_2.12-3.3.2.jar \
+                https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/3.3.2/delta-spark_2.12-3.3.2.jar;
+              curl -fsSL -o /opt/spark/ext-jars/delta-storage-3.3.2.jar \
+                https://repo1.maven.org/maven2/io/delta/delta-storage/3.3.2/delta-storage-3.3.2.jar;
+
+              echo 'Downloading RAPIDS...';
+              curl -fsSL -o /opt/spark/ext-jars/rapids-4-spark_2.12-25.10.0.jar \
+                https://repo1.maven.org/maven2/com/nvidia/rapids-4-spark_2.12/25.10.0/rapids-4-spark_2.12-25.10.0.jar;
+              curl -fsSL -o /opt/spark/ext-jars/cudf-25.10.0-cuda12.jar \
+                https://repo1.maven.org/maven2/ai/rapids/cudf/25.10.0/cudf-25.10.0-cuda12.jar;
 
               echo "Spark ready in /opt/spark"
           volumeMounts:
@@ -101,7 +107,7 @@ spec:
 
       containers:
         - name: jupyter
-          image: jupyter/datascience-notebook:python-3.10
+          image: jupyter/datascience-notebook:python-3.8
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8888
@@ -111,7 +117,7 @@ spec:
             - -lc
           args:
             - |
-              pip install --no-cache-dir pyspark==4.0.1
+              pip install --no-cache-dir pyspark==3.5.6
               start-notebook.sh
 
           env:
@@ -144,7 +150,7 @@ spec:
                 -Dhadoop.fs.s3a.endpoint=http://minio-svc:9000
                 -Dhadoop.fs.s3a.path.style.access=true
                 -Dhadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
-                -Dhadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+                -Dhadoop.fs.s3a.aws.credentials.provider=com.amazonaws.auth.EnvironmentVariableCredentialsProvider
 
           volumeMounts:
             - name: java-dist
