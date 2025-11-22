@@ -1,21 +1,80 @@
 # 🚀 Spark Lakehouse PoC on Kubernetes (microk8s)
+### Open‑Source Data Lakehouse Architecture — Production‑Grade PoC
 
-This repository contains a **Proof of Concept (PoC)** demonstrating an **open‑source Data Lakehouse architecture** deployed on **Kubernetes (microk8s)**.
+This repository contains a **Proof of Concept (PoC)** for a fully open‑source **Data Lakehouse** architecture deployed on **Kubernetes (microk8s)**. It includes:
 
-The goal is to build a fully functioning analytical environment composed of:
+- **Apache Spark 3.5.6** (Master, Workers, Thrift Server)
+- **Jupyter Notebook** with Spark 3.5.6
+- **Hive Metastore 3.1.3** backed by **MariaDB 11.4**
+- **MinIO S3** as the object‑storage data lake
+- **Delta Lake 3.3.2** and **RAPIDS 25.10.0** support
+- Full S3A Hadoop integration
+- External access via LoadBalancer services
 
-- **Apache Spark 4.0.1**
-- **Hive Metastore**
-- **S3‑compatible object storage (MinIO)**
-- **Spark Thrift Server with JDBC/ODBC**
-- **External access via LoadBalancer services**
-- **Support for Iceberg and Delta Lake tables**
-
-All components are deployed through reproducible YAML manifests.
+All components are deployed via declarative YAML manifests.
 
 ---
 
-## 📁 Repository Structure
+# 📦 Components & Versions
+
+## Namespace
+- `lakehouse`
+
+## MinIO
+- minio/minio:RELEASE.2025‑09‑07  
+- minio/mc:RELEASE.2025‑08‑13
+
+## MariaDB
+- mariadb:11.4
+
+## Hive Metastore
+- apache/hive:3.1.3  
+- mariadb‑java‑client 3.5.1  
+- hadoop‑aws 3.1.0  
+- aws‑java‑sdk‑bundle 1.11.271
+
+## Spark
+- apache/spark:3.5.6  
+- pyspark 3.5.6  
+- Delta Lake 3.3.2  
+- RAPIDS 25.10.0  
+
+## Jupyter
+- jupyter/datascience‑notebook:python‑3.8  
+- OpenJDK 11.0.27  
+- Spark 3.5.6 (downloaded by initContainer)
+
+---
+
+# 🧱 Architecture
+
+```
+                    ┌──────────────────────────┐
+                    │      SQL / BI Clients     │
+                    └───────────────┬───────────┘
+                                    ▼
+                         ┌──────────────────────┐
+                         │ Spark Thrift Server  │
+                         └─────────────┬────────┘
+                                       ▼
+             ┌─────────────────────────┼──────────────────────────┐
+             ▼                         │                          ▼
+   ┌───────────────────┐       ┌───────────────────┐      ┌──────────────────┐
+   │   Spark Master    │◄─────►│   Spark Worker    │◄────►│  Spark Worker    │
+   └───────────────────┘       └───────────────────┘      └──────────────────┘
+                                       ▼
+                         ┌──────────────────────┐
+                         │    Hive Metastore    │
+                         └─────────────┬────────┘
+                                       ▼
+                         ┌──────────────────────┐
+                         │        MinIO S3       │
+                         └──────────────────────┘
+```
+
+---
+
+# 📁 Repository Structure
 
 ```
 .
@@ -25,95 +84,36 @@ All components are deployed through reproducible YAML manifests.
 ├── 03_hive_metastore.yaml
 ├── 04_spark.yaml
 ├── 05_spark_thrift.yaml
-└── 99_external_access.yaml
-```
-
-### File Overview
-
-| File | Description |
-|------|-------------|
-| **00_namespace.yaml** | Creates the `lakehouse` namespace. |
-| **01_minio.yaml** | Deploys MinIO + root credentials + internal S3 service. |
-| **02_mariadb.yaml** | MariaDB database backend for Hive Metastore. |
-| **03_hive_metastore.yaml** | Hive Metastore with S3A configuration and dependencies. |
-| **04_spark.yaml** | Spark Master + Workers, S3A configuration, external jars. |
-| **05_spark_thrift.yaml** | Spark Thrift Server with JDBC/ODBC access. |
-| **99_external_access.yaml** | LoadBalancer services for external access. |
-
----
-
-## 🧱 Architecture
-
-```
-                        ┌────────────────────────────┐
-                        │        SQL Clients          │
-                        │ (DBeaver, JDBC Apps, BI...) │
-                        └──────────────┬──────────────┘
-                                       │ JDBC/ODBC
-                                       ▼
-                        ┌────────────────────────────┐
-                        │     Spark Thrift Server    │
-                        │          (cluster)         │
-                        └──────────────┬──────────────┘
-                                       │ Spark Jobs
-                                       ▼
- ┌────────────────────────────┐   ┌─────────────────────────────┐
- │       Spark Master         │   │        Spark Workers         │
- │ (REST, Scheduler, History) │◄──►   (Executors, S3A access)   │
- └──────────────┬─────────────┘   └─────────────────────────────┘
-                │
-                ▼
-        ┌─────────────────────────────┐
-        │        Hive Metastore       │
-        │ (Iceberg / Delta catalog)   │
-        └──────────────┬──────────────┘
-                       │
-                       ▼
-        ┌─────────────────────────────┐
-        │            MinIO            │
-        │  S3A: warehouse / tables    │
-        └─────────────────────────────┘
+├── 06_jupyter.yaml
+├── 99_external_access.yaml
+└── versions.txt
 ```
 
 ---
 
-## 🔧 Requirements
+# 🚀 Deployment
 
-- **microk8s 1.30+** with:
-  ```
-  microk8s enable dns storage ingress metallb
-  ```
-- `kubectl` configured for your cluster
-- At least **4 vCPUs** and **6–8 GB RAM**
-- A MetalLB IP range, e.g.:
-  ```
-  microk8s enable metallb:192.168.1.240-192.168.1.250
-  ```
-
----
-
-## 🚀 Deployment
-
-Clone the repository:
+## Requirements
 
 ```
-git clone https://github.com/<your_user>/<repo>.git
-cd <repo>
+microk8s enable dns storage ingress metallb
+microk8s enable metallb:192.168.1.240-192.168.1.250
 ```
 
-Apply manifests in order:
+## Apply Manifests
 
-```bash
+```
 kubectl apply -f 00_namespace.yaml
 kubectl apply -f 01_minio.yaml
 kubectl apply -f 02_mariadb.yaml
 kubectl apply -f 03_hive_metastore.yaml
 kubectl apply -f 04_spark.yaml
 kubectl apply -f 05_spark_thrift.yaml
+kubectl apply -f 06_jupyter.yaml
 kubectl apply -f 99_external_access.yaml
 ```
 
-Check everything is running:
+## Verify Deployment
 
 ```
 kubectl get pods -n lakehouse
@@ -122,81 +122,69 @@ kubectl get svc -n lakehouse
 
 ---
 
-## 🌐 External Access (LoadBalancer)
+# 🌐 External Access
 
 | Service | Port | Description |
 |---------|-------|-------------|
-| `spark-master-lb` | **8080** | Spark Master UI |
-| `spark-thrift-lb` | **10000** | JDBC/ODBC for BI clients |
-
-Example connection:
-
-```
-http://<LB_IP>:8080
-jdbc:hive2://<LB_IP>:10000/
-```
+| `minio-lb` | 9000 / 9001 | S3 API / Console |
+| `spark-master-ui-lb` | 8080 | Spark Master UI |
+| `spark-master-lb` | 7077 | Spark cluster endpoint |
+| `spark-master-rest-lb` | 6066 | Spark REST API |
+| `spark` | 10000 | Spark Thrift Server |
+| `jupyter-svc-lb` | 8888 | Jupyter Notebook |
 
 ---
 
-## 📦 S3A Storage
-
-MinIO is used as the S3-compatible object store.
-
-Spark configuration:
+# 🔧 S3A Configuration
 
 ```
-spark.hadoop.fs.s3a.endpoint = http://minio-svc:9000
-spark.hadoop.fs.s3a.access.key = minioadmin
-spark.hadoop.fs.s3a.secret.key = minioadmin123
-spark.hadoop.fs.s3a.path.style.access = true
+fs.s3a.endpoint=http://minio-svc:9000
+fs.s3a.path.style.access=true
+fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+fs.s3a.connection.ssl.enabled=false
 ```
+
+Credentials come from `minio-secret`.
 
 ---
 
-## 🧪 Quick Tests
+# 🧪 Quick Tests
 
-### Create a Delta/Iceberg table
+## Create Delta Table
 
 ```sql
-CREATE SCHEMA IF NOT EXISTS default;
-
-CREATE TABLE default.sales_delta (
+CREATE TABLE default.demo_delta (
   id INT,
-  date DATE,
-  product STRING,
-  qty INT,
-  unit_price DECIMAL(10,2)
+  msg STRING
 )
 USING delta;
 ```
 
-### Read data via spark-submit
+## Use Spark from Jupyter
+
+```python
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
+spark.range(10).show()
+```
+
+## spark-submit Test
 
 ```bash
-/opt/spark/bin/spark-submit   --master spark://spark-master-svc:7077   /opt/spark/work-dir/read_demo.py
+/opt/spark/bin/spark-submit   --master spark://spark-master-svc:7077   /opt/spark/examples/src/main/python/pi.py 1000
 ```
 
 ---
 
-## 📝 PoC Goals
+# 🔮 Next Steps
 
-- Validate a fully open‑source Lakehouse architecture  
-- Test compatibility with **S3A**, **Iceberg**, **Delta Lake**, and **Spark 4.0**
-- Deploy reproducible components on Kubernetes
-- Provide SQL access through the **Spark Thrift Server**
-
----
-
-## 📚 Next Steps
-
-- Add open‑source Unity Catalog
-- Add Superset for visualization
-- Integrate Keycloak authentication
-- Convert manifests into a full Helm chart
+- Add Keycloak authentication (OIDC)
+- Add open‑source Unity Catalog alternative
+- Add Superset for BI
+- Convert manifests into full Helm chart
 
 ---
 
-## 🧑‍💻 Author
-
-**Jorge Florencio**  
+# 👤 Author
+**Jorge Florencio García**  
 Data Architect
