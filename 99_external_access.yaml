@@ -97,3 +97,18 @@ spec:
       targetPort: 8888
   selector:
     app: jupyter
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hive-metastore-svc-lb
+  labels:
+    app: hive-metastore
+spec:
+  type: LoadBalancer
+  selector:
+    app: hive-metastore
+  ports:
+    - name: thrift
+      port: 9083
+      targetPort: 9083
